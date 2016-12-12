@@ -81,6 +81,8 @@ struct boundinfo
      * we just store a copy of the data as passed. */
     struct sockaddr* addr;
     socklen_t addrlen;
+    int socktype;
+    pid_t pid;
 
 } __attribute__((packed)) boundinfo_t;
 

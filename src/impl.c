@@ -98,7 +98,7 @@ static bool_t debug_enabled = FALSE;
         if( debug_enabled == TRUE )                                 \
         {                                                           \
             pid_t pid = getpid();                                   \
-            fprintf(stderr, "huptime %d: " fmt "\n", pid, ## args); \
+            fprintf(stderr, "huptime %d %s %d: " fmt "\n", pid, __FILE__, __LINE__, ## args); \
             fflush(stderr);                                         \
         }                                                           \
     } while(0)
@@ -1157,7 +1157,18 @@ do_bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
      * huptime. */
     impl_install_sighandlers();
 
-    DEBUG("do_bind(%d, ...) ...", sockfd);
+    int stype;
+    socklen_t slength = sizeof( int );
+    int reval = getsockopt(sockfd, SOL_SOCKET, SO_TYPE, &stype, &slength);
+    if(reval < 0)
+    {
+        DEBUG("do_bind(%d, ...) => %d (get socktype error)", sockfd, rval);
+        return rval;
+    }
+
+    pid_t pid = getpid();
+
+    DEBUG("do_bind(%d, ...) ... (pid %d)", sockfd, pid);
     L();
 
     /* See if this socket already exists. */
@@ -1165,8 +1176,10 @@ do_bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
     {
         fdinfo_t *info = fd_lookup(fd);
         if( info != NULL && 
+            pid != info->bound.pid &&
             info->type == BOUND &&
             info->bound.addrlen == addrlen &&
+            info->bound.socktype == stype &&
             !memcmp(addr, (void*)info->bound.addr, addrlen) )
         {
             DEBUG("Found ghost %d, cloning...", fd);
@@ -1249,6 +1262,8 @@ do_bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
     info->bound.addr = (struct sockaddr*)malloc(addrlen);
     info->bound.addrlen = addrlen;
     memcpy((void*)info->bound.addr, (void*)addr, addrlen);
+    info->bound.socktype = stype;
+    info->bound.pid = pid;
     fd_save(sockfd, info);
 
     /* Success. */
